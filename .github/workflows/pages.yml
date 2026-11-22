@@ -1,0 +1,67 @@
+name: Deploy GitHub Pages (dari SourceForge)
+
+# Situs dibangun di repo sumber (private). push-sf.sh di sana membangun Hugo,
+# mengemas public/ jadi public.zip, lalu mengunggahnya ke SourceForge di
+# web/winlatorgames/. Workflow ini mengunduh zip itu, mengekstraknya, lalu
+# menerbitkannya sebagai GitHub Pages.
+#
+# Repo ini publik: isinya hanya workflow ini. Jangan taruh kunci, token atau
+# berkas sumber situs di sini.
+#
+# Jalan setiap ada push ke main (push-sf.sh mendorong empty commit ke sini
+# setelah upload) dan bisa dijalankan manual dari tab Actions.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Unduh dan ekstrak public.zip
+        run: |
+          set -euo pipefail
+          URL="https://sourceforge.net/projects/wahyu6070-project-android/files/web/winlatorgames/public.zip/download"
+          # Mirror SourceForge kadang belum siap tepat setelah upload, atau
+          # mengembalikan halaman HTML alih-alih zip. Coba beberapa kali dan
+          # pastikan arsipnya utuh sebelum dipakai.
+          for i in 1 2 3 4 5; do
+            if curl -fsSL --retry 3 -o public.zip "$URL" && unzip -tq public.zip >/dev/null; then
+              break
+            fi
+            echo "Percobaan $i gagal, coba lagi dalam 30 detik..."
+            rm -f public.zip
+            sleep 30
+          done
+          [ -f public.zip ] || { echo "::error::Gagal mengunduh public.zip dari SourceForge."; exit 1; }
+          unzip -q public.zip -d public
+          [ -f public/index.html ] || { echo "::error::index.html tidak ada di akar public.zip."; exit 1; }
+          echo "$(find public -type f | wc -l) berkas, $(du -sh public | cut -f1)"
+
+      - name: Upload artifact Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy ke GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
