@@ -28,22 +28,23 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Unduh dan ekstrak public.zip
         run: |
           set -euo pipefail
           URL="https://sourceforge.net/projects/wahyu6070-project-android/files/web/winlatorgames/public.zip/download"
-          # Mirror SourceForge kadang belum siap tepat setelah upload, atau
-          # mengembalikan halaman HTML alih-alih zip. Coba beberapa kali dan
-          # pastikan arsipnya utuh sebelum dipakai.
-          for i in 1 2 3 4 5; do
+          # Berkas baru di SourceForge bisa 404 beberapa menit setelah upload
+          # (pernah sekitar 4 menit), dan mirror kadang mengembalikan halaman
+          # HTML alih-alih zip. Coba sampai ~15 menit dan pastikan arsipnya
+          # utuh sebelum dipakai.
+          for i in $(seq 1 15); do
             if curl -fsSL --retry 3 -o public.zip "$URL" && unzip -tq public.zip >/dev/null; then
               break
             fi
-            echo "Percobaan $i gagal, coba lagi dalam 30 detik..."
+            echo "Percobaan $i/15 gagal, coba lagi dalam 60 detik..."
             rm -f public.zip
-            sleep 30
+            sleep 60
           done
           [ -f public.zip ] || { echo "::error::Gagal mengunduh public.zip dari SourceForge."; exit 1; }
           unzip -q public.zip -d public
